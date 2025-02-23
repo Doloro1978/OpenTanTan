@@ -23,41 +23,40 @@ impl EventHandler for Handler {
         if msg.author.name == "OpenTanTanBeta" {
             return;
         }
-        if msg.content == "!ping" {
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message: {why:?}");
-            }
-        }
 
+        // Goes through every prompt per enum and matches it with msg content
         for prompt_enum in TanTanPrompts::iter() {
-            for prompt in prompt_enum.get_prompts().into_iter() {
-                if msg.content.contains(prompt) {
-                    let mut rng = self.rng.lock().await;
+            if prompt_enum.get_prompts().r#match(msg.content.clone()) {
+                // Take rng from handler
+                let mut rng = self.rng.lock().await;
 
-                    if let Err(why) = msg
-                        .channel_id
-                        .say(
-                            &ctx.http,
-                            prompt_enum
-                                .get_replies()
-                                .choose(&mut rng)
-                                .map(|reply| reply.replace("{}", &msg.author.name))
-                                .unwrap_or_else(|| "Err".to_string()),
-                        )
-                        .await
-                    {
-                        println!("Error sending message: {why:?}");
-                    }
-                    return;
+                // Reply with random valid responce
+                if let Err(why) = msg
+                    .channel_id
+                    // Replace any '{}' with username of sender
+                    .say(
+                        &ctx.http,
+                        prompt_enum
+                            .get_replies()
+                            .choose(&mut rng)
+                            .map(|reply| reply.replace("{}", &msg.author.name))
+                            .unwrap_or_else(|| "Err qwq".to_string()),
+                    )
+                    .await
+                {
+                    println!("Error sending message: {why:?}");
                 }
+                return;
             }
         }
-        ()
     }
 }
 
 #[tokio::main]
 async fn main() {
+    // Sets up tracing
+    tracing_subscriber::fmt::init();
+
     // Login with a bot token from the environment
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     // Set gateway intents, which decides what events the bot will be notified about
@@ -66,7 +65,7 @@ async fn main() {
         | GatewayIntents::MESSAGE_CONTENT;
 
     // Create a new instance of the Client, logging in as a bot.
-    let mut client = Client::builder(&token, intents)
+    let mut client: Client = Client::builder(&token, intents)
         .event_handler(Handler {
             rng: Mutex::new(StdRng::from_os_rng()),
         })
